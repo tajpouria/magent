@@ -36,7 +36,6 @@ Otherwise, reply CONTINUE, or the reason why the task is not solved yet.""",
 
 teachable_agent = TeachableAgent(
     name="TeachableAgent",
-    human_input_mode="NEVER",
     teach_config={
         "path_to_db_dir": "./.tmp/interactive/teachable_agent_db",
         "recall_threshold": 1.5,
@@ -65,15 +64,13 @@ teachable_agent = TeachableAgent(
     },
 )
 
-teachable_agent.register_function(
-    function_map={
-        "ask_expert_assistant": ask_expert_assistant,
-    }
-)
 user_proxy_agent = UserProxyAgent(
     "UserProxyAgent",
     human_input_mode="ALWAYS",
     max_consecutive_auto_reply=10,
+    function_map={
+        "ask_expert_assistant": ask_expert_assistant,
+    },
 )
 
 teachable_agent.initiate_chat(
