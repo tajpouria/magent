@@ -1,64 +1,86 @@
-from autogen import UserProxyAgent, config_list_from_json
-from termcolor import colored
+#!/usr/bin/env python
+
+from autogen import AssistantAgent, UserProxyAgent, config_list_from_json
 from autogen.agentchat.contrib.teachable_agent import TeachableAgent
 
 
-verbosity = 0  # 0 for basic info, 1 to add memory operations, 2 for analyzer messages, 3 for memo lists.
-recall_threshold = (
-    1.5  # Higher numbers allow more (but less relevant) memos to be recalled.
+config_list = config_list_from_json(
+    env_or_file="OAI_CONFIG_LIST", filter_dict={"model": ["gpt-4"]}
 )
-use_cache = False  # If True, cached LLM calls will be skipped and responses pulled from cache. False exposes LLM non-determinism.
-
-# Specify the model to use. GPT-3.5 is less reliable than GPT-4 at learning from user input.
-filter_dict = {"model": ["gpt-4"]}
 
 
-def create_teachable_agent(reset_db=False):
-    """Instantiates a TeachableAgent using the settings from the top of this file."""
-    # Load LLM inference endpoints from an env variable or a file
-    # See https://microsoft.github.io/autogen/docs/FAQ#set-your-api-endpoints
-    # and OAI_CONFIG_LIST_sample
-    config_list = config_list_from_json(
-        env_or_file="OAI_CONFIG_LIST", filter_dict=filter_dict
-    )
-    teachable_agent = TeachableAgent(
-        name="teachableagent",
+def ask_expert_assistant(message):
+    assistant_agent = AssistantAgent(
+        name="ask_expert_assistant::AssistantAgent",
         llm_config={
+            "temperature": 0,
             "config_list": config_list,
-            "request_timeout": 120,
-            "use_cache": use_cache,
-        },
-        teach_config={
-            "verbosity": verbosity,
-            "reset_db": reset_db,
-            "path_to_db_dir": "./tmp/interactive/teachable_agent_db",
-            "recall_threshold": recall_threshold,
         },
     )
-    return teachable_agent
-
-
-def interact_freely_with_user():
-    """Starts a free-form chat between the user and TeachableAgent."""
-
-    # Create the agents.
-    print(colored("\nLoading previous memory (if any) from disk.", "light_cyan"))
-    teachable_agent = create_teachable_agent(reset_db=False)
-    user = UserProxyAgent("user", human_input_mode="ALWAYS")
-
-    # Start the chat.
-    teachable_agent.initiate_chat(
-        user,
-        message="Greetings, I'm a teachable user assistant! What's on your mind today?",
+    user_proxy_agent = UserProxyAgent(
+        name="ask_expert_assistant::UserProxyAgent",
+        human_input_mode="NEVER",
+        code_execution_config={"work_dir": "./.tmp/code/expert_user"},
+        system_message=""""Reply TERMINATE if the task has been solved at full satisfaction.
+Otherwise, reply CONTINUE, or the reason why the task is not solved yet.""",
     )
 
-    # Let the teachable agent remember things that should be learned from this chat.
-    teachable_agent.learn_from_user_feedback()
+    user_proxy_agent.initiate_chat(assistant_agent, message=message)
+    user_proxy_agent.stop_reply_at_receive(assistant_agent)
+    user_proxy_agent.send(
+        "Only send the final output.",
+        assistant_agent,
+    )
+    return user_proxy_agent.last_message()["content"]
 
-    # Wrap up.
-    teachable_agent.close_db()
 
+teachable_agent = TeachableAgent(
+    name="TeachableAgent",
+    human_input_mode="NEVER",
+    teach_config={
+        "path_to_db_dir": "./.tmp/interactive/teachable_agent_db",
+        "recall_threshold": 1.5,
+    },
+    llm_config={
+        "config_list": config_list,
+        "request_timeout": 600,
+        "seed": 42,
+        "temperature": 0,
+        "functions": [
+            {
+                "name": "ask_expert_assistant",
+                "description": "ALWAYS ask expert when you can't solve the problem or answer the question satisfactorily first, then answer whether you know the answer or not.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "description": "question to ask expert. Ensure the question includes enough context, such as the code and the execution result. The expert does not know the conversation between you and the user unless you share the conversation with the expert.",
+                        },
+                    },
+                    "required": ["message"],
+                },
+            }
+        ],
+    },
+)
 
-if __name__ == "__main__":
-    """Lets the user test TeachableAgent interactively."""
-    interact_freely_with_user()
+teachable_agent.register_function(
+    function_map={
+        "ask_expert_assistant": ask_expert_assistant,
+    }
+)
+user_proxy_agent = UserProxyAgent(
+    "UserProxyAgent",
+    human_input_mode="ALWAYS",
+    max_consecutive_auto_reply=10,
+)
+
+teachable_agent.initiate_chat(
+    user_proxy_agent,
+    message="I am a teachable agent. I can learn from your feedback.",
+)
+
+teachable_agent.learn_from_user_feedback()
+
+teachable_agent.close_db()
