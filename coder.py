@@ -23,34 +23,10 @@ user_proxy_agent = UserProxyAgent(
 
 
 message = """
-Write a maze program that receives txt files which represents a maze, and source and destination coordinates
-For example, the following maze is represented as a txt file:
-(Read this sample from sth/magent/maze.txt)
-```txt
-#######
-#....b#
-#.###.#
-#.#...#
-#...#.#
-#.#.#.#
-#....a#
-#######
-```
-The # represents a wall, and the . represents a path. The a and b represents the source and destination coordinates, respectively.
-The program should convert this txt file to a grid of 0s and 1s, where 0 represents a wall and 1 represents a path. 2 represents the source and 3 represents the destination.
-For example, the above maze should be converted to the following grid:
-```python
-maze = [
-    [0,0,0,0,0,0,0]
-    [0,1,1,1,1,3,0]
-    [0,1,0,1,0,1,0]
-    [0,1,0,0,0,1,0]
-    [0,1,0,1,0,1,0]
-    [0,1,0,1,0,1,0]
-    [0,1,1,1,1,2,0]
-    [0,0,0,0,0,0,0]
-]
-```
+Write a tick tack toe game in python.
+The game must be web based and must be playable by two players.
+It should run on localhost. must have restart button.
+and it should look pretty
 """
 
 user_proxy_agent.initiate_chat(assistant_agent, message=message)
